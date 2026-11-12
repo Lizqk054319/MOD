@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "holovis",
+  "version": "${version}",
+  "name": "HoloVis",
+  "description": "Hologramowe GUI (Prawy Shift) + konfigurowalne hitboxy.",
+  "authors": ["you"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": { "client": ["pl.holovis.HoloVisClient"] },
+  "depends": {
+    "fabricloader": ">=0.16.10",
+    "minecraft": "~1.21.4",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
