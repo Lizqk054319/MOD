@@ -64,6 +64,22 @@ public class HoloConfig {
 
     public ColorSetting guiColor = new ColorSetting(0x00F0FF);
     public boolean hologramFx = true;
+    public ColorSetting guiColor2 = new ColorSetting(0xB04CFF);
+    public boolean guiGradient = false;
+    public boolean guiGradientText = false;
+    public ColorSetting guiBg = new ColorSetting(0x0A1020);
+    public float guiBgAlpha = 0.88f;
+    public ColorSetting textColor = new ColorSetting(0xE8EEF8);
+
+    public boolean skyEnabled = false;
+    public ColorSetting skyColor = new ColorSetting(0x8A2BE2);
+    public boolean skyDaylight = true;
+    public boolean skyClouds = true;
+
+    public boolean watermark = true;
+    public boolean showFps = true;
+    public boolean coords = false;
+    public ColorSetting hudColor = new ColorSetting(0x00F0FF);
 
     public SoundSetting hitSound = new SoundSetting(true, "mc:entity.experience_orb.pickup");
     public SoundSetting killSound = new SoundSetting(false, "mc:entity.player.levelup");

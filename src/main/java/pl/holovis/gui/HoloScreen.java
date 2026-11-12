@@ -6,6 +6,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Util;
 import net.minecraft.util.math.MathHelper;
 import org.lwjgl.glfw.GLFW;
+import pl.holovis.Gfx;
 import pl.holovis.HoloConfig;
 import pl.holovis.HoloSounds;
 
@@ -21,16 +22,21 @@ import java.util.function.IntConsumer;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-/** Menu w stylu "kolumn z modułami": ciemne panele, przełączniki, rozwijane ustawienia. */
+/** Menu w stylu kolumn z modułami: panele, przełączniki, rozwijane ustawienia, gradient, własne kolory. */
 public class HoloScreen extends Screen {
-    private static final int PW = 164, GAP = 14, HEAD = 24, ROW = 20;
-    private static final int WHITE = 0xE8EEF8, GRAY = 0x8791A6, BASE = 0x0A1020;
+    private static final int PW = 144, GAP = 8, HEAD = 24, ROW = 20;
+    private static final int GRAY = 0x8791A6;
     private static final int[] PRESETS = {0x00F0FF, 0x3D7BFF, 0xB04CFF, 0xFF4FD8, 0xFF3B3B, 0xFF9A1F, 0xFFE81F, 0x3BFF7A, 0xFFFFFF};
+    private static final int[] NEUTRALS = {0x000000, 0x0A1020, 0x151515, 0x1E2A3A, 0x3A3A48, 0x808080, 0xC8C8C8, 0xE8EEF8, 0xFFFFFF};
 
     private final List<Panel> panels = new ArrayList<>();
     private final long openedAt = Util.getMeasuringTimeMs();
     private float fade = 1f;
-    private int accent = 0x00F0FF;
+    private float sc = 1f;
+    private int vw, vh;
+    private int accent = 0x00F0FF, accent2 = 0xB04CFF, bgc = 0x0A1020, txtC = 0xE8EEF8;
+    private float bgA = 0.88f;
+    private boolean grad;
     private String filter = "";
     private boolean searchFocus, placed;
     private Panel dragPanel;
@@ -63,7 +69,7 @@ public class HoloScreen extends Screen {
         hb.s.add(new CycleSet("Cele", () -> targets, () -> c.target.ordinal(),
                 i -> c.target = HoloConfig.Target.values()[i]));
         hb.s.add(new SliderSet("Wypełnienie", () -> c.fillAlpha, v -> c.fillAlpha = v, null, v -> (int) (v * 100) + "%"));
-        colorRows(hb, c.hitboxColor);
+        colorRows(hb, c.hitboxColor, PRESETS);
         vis.mods.add(hb);
         panels.add(vis);
 
@@ -78,16 +84,45 @@ public class HoloScreen extends Screen {
         snd.mods.add(kill);
         panels.add(snd);
 
+        Panel world = new Panel("Świat");
+        Module sky = new Module("Custom Sky", () -> c.skyEnabled, v -> c.skyEnabled = v);
+        colorRows(sky, c.skyColor, PRESETS);
+        sky.s.add(new ToggleSet("Pora dnia", () -> c.skyDaylight, v -> c.skyDaylight = v));
+        sky.s.add(new ToggleSet("Chmury", () -> c.skyClouds, v -> c.skyClouds = v));
+        world.mods.add(sky);
+        panels.add(world);
+
+        Panel hud = new Panel("HUD");
+        Module wm = new Module("Watermark", () -> c.watermark, v -> c.watermark = v);
+        wm.s.add(new ToggleSet("Pokaż FPS", () -> c.showFps, v -> c.showFps = v));
+        colorRows(wm, c.hudColor, PRESETS);
+        Module co = new Module("Koordynaty", () -> c.coords, v -> c.coords = v);
+        hud.mods.add(wm);
+        hud.mods.add(co);
+        panels.add(hud);
+
         Panel cl = new Panel("Klient");
-        Module gui = new Module("Wygląd GUI", null, null);
-        colorRows(gui, c.guiColor);
-        gui.s.add(new ToggleSet("Efekt hologramu", () -> c.hologramFx, v -> c.hologramFx = v));
-        cl.mods.add(gui);
+        Module look = new Module("Akcent GUI", null, null);
+        colorRows(look, c.guiColor, PRESETS);
+        look.s.add(new ToggleSet("Efekt hologramu", () -> c.hologramFx, v -> c.hologramFx = v));
+        Module gr = new Module("Gradient", () -> c.guiGradient, v -> c.guiGradient = v);
+        colorRows(gr, c.guiColor2, PRESETS);
+        gr.s.add(new ToggleSet("Gradient napisu", () -> c.guiGradientText, v -> c.guiGradientText = v));
+        Module bg = new Module("Tło GUI", null, null);
+        colorRows(bg, c.guiBg, NEUTRALS);
+        bg.s.add(new SliderSet("Przezroczystość", () -> (c.guiBgAlpha - 0.2f) / 0.8f, v -> c.guiBgAlpha = 0.2f + v * 0.8f,
+                null, v -> (int) ((0.2f + v * 0.8f) * 100) + "%"));
+        Module tx = new Module("Kolor napisu", null, null);
+        colorRows(tx, c.textColor, NEUTRALS);
+        cl.mods.add(look);
+        cl.mods.add(gr);
+        cl.mods.add(bg);
+        cl.mods.add(tx);
         panels.add(cl);
     }
 
-    private void colorRows(Module m, HoloConfig.ColorSetting cs) {
-        m.s.add(new SwatchSet(cs));
+    private void colorRows(Module m, HoloConfig.ColorSetting cs, int[] pal) {
+        m.s.add(new SwatchSet(cs, pal));
         m.s.add(new SliderSet("Odcień", () -> cs.h, v -> { cs.h = v; cs.rainbow = false; },
                 f -> HoloConfig.hsv((float) f, 1f, 1f), v -> (int) (v * 360) + "°"));
         m.s.add(new SliderSet("Nasycenie", () -> cs.s, v -> cs.s = v,
@@ -107,7 +142,7 @@ public class HoloScreen extends Screen {
                 v -> String.format("%.2f", 0.5f + v * 1.5f)));
         m.s.add(new ButtonRow(new String[]{"Test", "Folder", "Odśw."},
                 new Runnable[]{() -> HoloSounds.play(ss), HoloSounds::openFolder, HoloSounds::refresh}));
-        m.s.add(new InfoSet("Przeciągnij plik .wav", "na okno, aby dodać dźwięk"));
+        m.s.add(new InfoSet("Przeciągnij plik", ".wav na okno gry,", "aby dodać dźwięk"));
     }
 
     // =====================================================================
@@ -117,23 +152,43 @@ public class HoloScreen extends Screen {
         return (((int) (MathHelper.clamp(a * fade, 0f, 1f) * 255)) << 24) | (rgb & 0xFFFFFF);
     }
 
-    private static int mix(int a, int b, float t) {
-        int r = (int) (((a >> 16) & 255) * (1 - t) + ((b >> 16) & 255) * t);
-        int g = (int) (((a >> 8) & 255) * (1 - t) + ((b >> 8) & 255) * t);
-        int bl = (int) ((a & 255) * (1 - t) + (b & 255) * t);
-        return (r << 16) | (g << 8) | bl;
-    }
+    private static int mix(int a, int b, float t) { return Gfx.mix(a, b, t); }
 
     private static int inset(int r, int i) {
         double dy = r - i - 0.5;
         return (int) Math.ceil(r - Math.sqrt(Math.max(0, r * r - dy * dy)));
     }
 
+    /** Zaokrąglony prostokąt z gradientem (pionowym albo poziomym) c1 -> c2 (ARGB). */
+    private void box(DrawContext c, int x, int y, int w, int h, int r, int c1, int c2,
+                     boolean horiz, boolean top, boolean bottom) {
+        if (w <= 0 || h <= 0) return;
+        r = Math.min(r, Math.min(w, h) / 2);
+        if (horiz) {
+            for (int i = 0; i < w; i++) {
+                int col = Gfx.lerpArgb(c1, c2, w <= 1 ? 0f : i / (float) (w - 1));
+                int yt = 0, yb = 0;
+                if (r > 0) {
+                    int e = i < r ? i : (i >= w - r ? w - 1 - i : -1);
+                    if (e >= 0) { int in = inset(r, e); if (top) yt = in; if (bottom) yb = in; }
+                }
+                c.fill(x + i, y + yt, x + i + 1, y + h - yb, col);
+            }
+        } else {
+            for (int j = 0; j < h; j++) {
+                int col = Gfx.lerpArgb(c1, c2, h <= 1 ? 0f : j / (float) (h - 1));
+                int in = 0;
+                if (r > 0) {
+                    if (top && j < r) in = inset(r, j);
+                    else if (bottom && j >= h - r) in = inset(r, h - 1 - j);
+                }
+                c.fill(x + in, y + j, x + w - in, y + j + 1, col);
+            }
+        }
+    }
+
     private void rrect(DrawContext c, int x, int y, int w, int h, int r, int color, boolean top, boolean bottom) {
-        int tr = top ? r : 0, br = bottom ? r : 0;
-        c.fill(x, y + tr, x + w, y + h - br, color);
-        for (int i = 0; i < tr; i++) { int in = inset(r, i); c.fill(x + in, y + i, x + w - in, y + i + 1, color); }
-        for (int i = 0; i < br; i++) { int in = inset(r, i); c.fill(x + in, y + h - 1 - i, x + w - in, y + h - i, color); }
+        box(c, x, y, w, h, r, color, color, false, top, bottom);
     }
 
     private void txt(DrawContext c, String s, int x, int y, int rgb, float a) {
@@ -141,7 +196,8 @@ public class HoloScreen extends Screen {
     }
 
     private void toggle(DrawContext c, int x, int y, int w, int h, boolean on) {
-        rrect(c, x, y, w, h, h / 2, on ? argb(accent, 1f) : argb(0x3A4256, 1f), true, true);
+        if (on) box(c, x, y, w, h, h / 2, argb(accent, 1f), argb(grad ? accent2 : accent, 1f), true, true, true);
+        else rrect(c, x, y, w, h, h / 2, argb(0x3A4256, 1f), true, true);
         int k = h - 4;
         int kx = on ? x + w - k - 2 : x + 2;
         rrect(c, kx, y + 2, k, k, k / 2, argb(0xFFFFFF, 1f), true, true);
@@ -170,18 +226,27 @@ public class HoloScreen extends Screen {
 
     @Override
     protected void init() {
+        int total = panels.size() * PW + (panels.size() - 1) * GAP;
+        sc = MathHelper.clamp((width - 16f) / total, 0.5f, 1f);
+        vw = (int) (width / sc);
+        vh = (int) (height / sc);
         if (placed) return;
         placed = true;
-        int total = panels.size() * PW + (panels.size() - 1) * GAP;
-        int x = Math.max(8, (width - total) / 2);
+        int x = Math.max(8, (vw - total) / 2);
         for (Panel p : panels) { p.x = x; p.y = 52; x += PW + GAP; }
     }
 
     @Override
-    public void render(DrawContext c, int mx, int my, float delta) {
+    public void render(DrawContext c, int rawMx, int rawMy, float delta) {
         long now = Util.getMeasuringTimeMs();
         HoloConfig cfg = HoloConfig.get();
         accent = cfg.guiColor.rgb();
+        accent2 = cfg.guiColor2.rgb();
+        bgc = cfg.guiBg.rgb();
+        txtC = cfg.textColor.rgb();
+        bgA = cfg.guiBgAlpha;
+        grad = cfg.guiGradient;
+
         float t = Math.min(1f, (now - openedAt) / 220f);
         fade = t;
         if (cfg.hologramFx) {
@@ -191,51 +256,65 @@ public class HoloScreen extends Screen {
 
         c.fill(0, 0, width, height, ((int) (0x66 * t)) << 24);
 
+        c.getMatrices().push();
+        c.getMatrices().scale(sc, sc, 1f);
+        int mx = (int) (rawMx / sc), my = (int) (rawMy / sc);
+
         // tytuł
         c.getMatrices().push();
         c.getMatrices().scale(2f, 2f, 1f);
-        txt(c, "holovis", 12, 8, WHITE, 1f);
+        int ta = (int) (MathHelper.clamp(fade, 0f, 1f) * 255);
+        if (cfg.guiGradientText && grad) Gfx.gradientText(c, textRenderer, "holovis", 12, 8, accent, accent2, ta, false);
+        else c.drawText(textRenderer, "holovis", 12, 8, (ta << 24) | txtC, false);
         c.getMatrices().pop();
-        txt(c, "VISUALS", 100, 14, accent, 0.9f);
+        txt(c, "VISUALS", 116, 14, accent, 0.9f);
 
         // wyszukiwarka
-        int sx = width - 170;
-        rrect(c, sx, 18, 150, 18, 5, argb(BASE, 0.85f), true, true);
-        if (searchFocus) c.drawBorder(sx, 18, 150, 18, argb(accent, 0.8f));
+        int sx = vw - 170;
+        rrect(c, sx, 18, 150, 18, 5, argb(bgc, 0.85f), true, true);
+        c.drawBorder(sx, 18, 150, 18, argb(accent, searchFocus ? 0.8f : 0.25f));
         String shown = filter.isEmpty() && !searchFocus ? "Szukaj..." : filter + (searchFocus && (now / 500) % 2 == 0 ? "_" : "");
-        txt(c, shown, sx + 8, 24, filter.isEmpty() ? GRAY : WHITE, 1f);
+        txt(c, shown, sx + 8, 24, filter.isEmpty() ? GRAY : txtC, 1f);
 
         if (cfg.hologramFx) {
-            int sy = (int) ((now / 10) % (height + 40)) - 20;
-            c.fillGradient(0, sy - 14, width, sy, argb(accent, 0f), argb(accent, 0.07f));
-            c.fill(0, sy, width, sy + 1, argb(accent, 0.12f));
+            int sy = (int) ((now / 10) % (vh + 40)) - 20;
+            c.fillGradient(0, sy - 14, vw, sy, argb(accent, 0f), argb(accent, 0.07f));
+            c.fill(0, sy, vw, sy + 1, argb(accent, 0.12f));
         }
 
         for (Panel p : panels) renderPanel(c, p, mx, my, cfg.hologramFx);
 
         if (now < statusUntil) {
             int w = textRenderer.getWidth(status) + 20;
-            int x = (width - w) / 2, y = height - 34;
-            rrect(c, x, y, w, 20, 6, argb(BASE, 0.92f), true, true);
-            txt(c, status, x + 10, y + 6, WHITE, 1f);
+            int x = (vw - w) / 2, y = vh - 34;
+            rrect(c, x, y, w, 20, 6, argb(bgc, 0.92f), true, true);
+            txt(c, status, x + 10, y + 6, txtC, 1f);
         }
-        txt(c, "Prawy Shift / ESC - zamknij   |   PPM na module - ustawienia", 10, height - 14, GRAY, 0.8f);
+        txt(c, "Prawy Shift / ESC - zamknij   |   PPM na module - ustawienia", 10, vh - 14, GRAY, 0.8f);
+
+        c.getMatrices().pop();
     }
 
     private void renderPanel(DrawContext c, Panel p, int mx, int my, boolean fx) {
         layout(p);
-        rrect(c, p.x, p.y + HEAD, PW, p.h - HEAD, 6, argb(mix(BASE, accent, 0.10f), 0.88f), false, true);
-        rrect(c, p.x, p.y, PW, HEAD, 6, argb(mix(BASE, accent, 0.24f), 0.94f), true, false);
+        int bodyTop = argb(grad ? mix(bgc, accent, 0.30f) : bgc, bgA);
+        int bodyBot = argb(grad ? mix(bgc, accent2, 0.30f) : bgc, bgA);
+        box(c, p.x, p.y + HEAD, PW, p.h - HEAD, 6, bodyTop, bodyBot, false, false, true);
+        if (grad) {
+            box(c, p.x, p.y, PW, HEAD, 6, argb(mix(bgc, accent, 0.8f), 0.95f), argb(mix(bgc, accent2, 0.8f), 0.95f), true, true, false);
+        } else {
+            rrect(c, p.x, p.y, PW, HEAD, 6, argb(mix(bgc, accent, 0.24f), 0.94f), true, false);
+        }
         if (fx) {
             for (int yy = p.y + HEAD; yy < p.y + p.h - 3; yy += 3)
                 c.fill(p.x + 3, yy, p.x + PW - 3, yy + 1, argb(accent, 0.04f));
         }
 
-        txt(c, p.title, p.x + 10, p.y + 8, WHITE, 1f);
+        txt(c, p.title, p.x + 10, p.y + 8, txtC, 1f);
         int vis = 0;
         for (Module m : p.mods) if (m.visible) vis++;
         String cnt = String.valueOf(vis);
-        txt(c, cnt, p.x + PW - 10 - textRenderer.getWidth(cnt), p.y + 8, GRAY, 1f);
+        txt(c, cnt, p.x + PW - 10 - textRenderer.getWidth(cnt), p.y + 8, grad ? txtC : GRAY, 0.8f);
 
         for (Module m : p.mods) {
             if (!m.visible) continue;
@@ -243,8 +322,11 @@ public class HoloScreen extends Screen {
             boolean hasToggle = m.on != null;
             boolean on = !hasToggle || m.on.getAsBoolean();
             if (hov) c.fill(p.x + 4, m.rowY, p.x + PW - 4, m.rowY + ROW, argb(accent, 0.12f));
-            if (hasToggle && on) c.fill(p.x + 4, m.rowY + 4, p.x + 6, m.rowY + ROW - 4, argb(accent, 1f));
-            txt(c, m.name, p.x + 12, m.rowY + 6, on ? WHITE : GRAY, 1f);
+            if (hasToggle && on) {
+                if (grad) c.fillGradient(p.x + 4, m.rowY + 4, p.x + 6, m.rowY + ROW - 4, argb(accent, 1f), argb(accent2, 1f));
+                else c.fill(p.x + 4, m.rowY + 4, p.x + 6, m.rowY + ROW - 4, argb(accent, 1f));
+            }
+            txt(c, m.name, p.x + 12, m.rowY + 6, on ? txtC : GRAY, 1f);
             if (!m.s.isEmpty()) txt(c, m.open ? "v" : ">", p.x + PW - 46, m.rowY + 6, GRAY, 1f);
             if (hasToggle) toggle(c, p.x + PW - 32, m.rowY + 5, 22, 10, on);
 
@@ -266,7 +348,9 @@ public class HoloScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
-        int sx = width - 170;
+        mx /= sc;
+        my /= sc;
+        int sx = vw - 170;
         searchFocus = mx >= sx && mx < sx + 150 && my >= 18 && my < 36;
         if (searchFocus) return true;
 
@@ -298,7 +382,7 @@ public class HoloScreen extends Screen {
             }
             return true;
         }
-        return super.mouseClicked(mx, my, button);
+        return true;
     }
 
     private void rowClick(Panel p, Module m, double mx, int button) {
@@ -314,13 +398,15 @@ public class HoloScreen extends Screen {
 
     @Override
     public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
+        mx /= sc;
+        my /= sc;
         if (dragPanel != null) {
-            dragPanel.x = MathHelper.clamp((int) mx - dragDx, 0, Math.max(0, width - PW));
-            dragPanel.y = MathHelper.clamp((int) my - dragDy, 0, Math.max(0, height - HEAD));
+            dragPanel.x = MathHelper.clamp((int) mx - dragDx, 0, Math.max(0, vw - PW));
+            dragPanel.y = MathHelper.clamp((int) my - dragDy, 0, Math.max(0, vh - HEAD));
             return true;
         }
         if (dragging != null) { dragging.drag(mx); return true; }
-        return super.mouseDragged(mx, my, button, dx, dy);
+        return false;
     }
 
     @Override
@@ -328,7 +414,7 @@ public class HoloScreen extends Screen {
         if (dragging != null || dragPanel != null) HoloConfig.save();
         dragging = null;
         dragPanel = null;
-        return super.mouseReleased(mx, my, button);
+        return true;
     }
 
     @Override
@@ -411,11 +497,13 @@ public class HoloScreen extends Screen {
         int h() { return 16; }
         void draw(DrawContext c, int mx, int my) {
             if (hover(mx, my)) c.fill(x - 2, y, x + w + 2, y + 16, argb(accent, 0.10f));
-            txt(c, label, x + 2, y + 4, WHITE, 0.95f);
+            txt(c, label, x + 2, y + 4, txtC, 0.95f);
             toggle(c, x + w - 20, y + 4, 18, 8, get.getAsBoolean());
         }
         boolean click(double mx, double my, int b) { set.accept(!get.getAsBoolean()); HoloConfig.save(); return true; }
     }
+
+    private int accentLight() { return mix(accent, 0xFFFFFF, 0.55f); }
 
     private class CycleSet extends Setting {
         final String label; final Supplier<List<String>> opts; final IntSupplier get; final IntConsumer set;
@@ -427,7 +515,7 @@ public class HoloScreen extends Screen {
             List<String> o = opts.get();
             int i = get.getAsInt();
             String v = i >= 0 && i < o.size() ? o.get(i) : "?";
-            int maxW = w - textRenderer.getWidth(label) - 16;
+            int maxW = w - textRenderer.getWidth(label) - 24;
             v = textRenderer.trimToWidth(v, Math.max(20, maxW));
             String s = "< " + v + " >";
             txt(c, s, x + w - textRenderer.getWidth(s) - 2, y + 4, accentLight(), 1f);
@@ -443,8 +531,6 @@ public class HoloScreen extends Screen {
         }
     }
 
-    private int accentLight() { return mix(accent, 0xFFFFFF, 0.55f); }
-
     private class SliderSet extends Setting {
         final String label; final Supplier<Float> get; final Consumer<Float> set;
         final DoubleToIntFunction track; final Function<Float, String> fmt;
@@ -457,7 +543,7 @@ public class HoloScreen extends Screen {
             float v = MathHelper.clamp(get.get(), 0f, 1f);
             txt(c, label, x + 2, y + 1, GRAY, 1f);
             String s = fmt.apply(v);
-            txt(c, s, x + w - textRenderer.getWidth(s) - 2, y + 1, WHITE, 1f);
+            txt(c, s, x + w - textRenderer.getWidth(s) - 2, y + 1, txtC, 1f);
             int ty = y + 13, tw = w - 4, tx = x + 2;
             if (track != null) {
                 for (int i = 0; i < tw; i += 2)
@@ -475,20 +561,24 @@ public class HoloScreen extends Screen {
     }
 
     private class SwatchSet extends Setting {
-        final HoloConfig.ColorSetting cs;
-        SwatchSet(HoloConfig.ColorSetting cs) { this.cs = cs; }
+        final HoloConfig.ColorSetting cs; final int[] pal;
+        SwatchSet(HoloConfig.ColorSetting cs, int[] pal) { this.cs = cs; this.pal = pal; }
         int h() { return 16; }
         void draw(DrawContext c, int mx, int my) {
-            for (int i = 0; i < PRESETS.length; i++) {
-                int bx = x + 2 + i * 16;
-                boolean hov = mx >= bx && mx < bx + 14 && my >= y + 1 && my < y + 13;
-                rrect(c, bx, y + 1, 14, 12, 3, argb(PRESETS[i], 1f), true, true);
-                if (hov) c.drawBorder(bx - 1, y, 16, 14, argb(0xFFFFFF, 0.9f));
+            for (int i = 0; i < pal.length; i++) {
+                int bx = x + 2 + i * 14;
+                boolean hov = mx >= bx && mx < bx + 12 && my >= y + 1 && my < y + 13;
+                rrect(c, bx, y + 1, 12, 12, 3, argb(pal[i], 1f), true, true);
+                c.drawBorder(bx, y + 1, 12, 12, argb(hov ? 0xFFFFFF : 0x808080, hov ? 0.95f : 0.35f));
             }
         }
         boolean click(double mx, double my, int b) {
-            int i = (int) ((mx - (x + 2)) / 16);
-            if (i >= 0 && i < PRESETS.length) { cs.set(PRESETS[i]); cs.rainbow = false; HoloConfig.save(); }
+            int i = (int) ((mx - (x + 2)) / 14);
+            if (i >= 0 && i < pal.length && (mx - (x + 2)) % 14 < 12) {
+                cs.set(pal[i]);
+                cs.rainbow = false;
+                HoloConfig.save();
+            }
             return true;
         }
     }
@@ -505,7 +595,7 @@ public class HoloScreen extends Screen {
                 boolean hov = mx >= bx && mx < bx + bw && my >= y && my < y + 16;
                 rrect(c, bx, y, bw, 16, 4, argb(accent, hov ? 0.40f : 0.22f), true, true);
                 int tw = textRenderer.getWidth(labels[i]);
-                txt(c, labels[i], bx + (bw - tw) / 2, y + 4, WHITE, 1f);
+                txt(c, labels[i], bx + (bw - tw) / 2, y + 4, txtC, 1f);
             }
         }
         boolean click(double mx, double my, int b) {

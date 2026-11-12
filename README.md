@@ -1,13 +1,13 @@
 # HoloVis (Fabric 1.21.4, client-side)
 
-- **Prawy Shift** – menu z kolumnami modułów (przeciągaj panele za nagłówek, PPM / strzałka = ustawienia, pole wyszukiwania).
-- **Hitbox** – styl (Kontur / Hologram / Wypełnienie), cele, wypełnienie, kolor (presety, H/S/B, tęcza).
-- **Hit Sound / Kill Sound** – dźwięk przy uderzeniu / zabiciu; wbudowane dźwięki albo własne pliki **.wav**.
-  Własne dźwięki: przeciągnij plik .wav na okno gry przy otwartym menu albo wrzuć go do `config/holovis/sounds`
-  (przycisk "Folder" otwiera ten katalog, "Odśw." odświeża listę).
-- **Wygląd GUI** – kolor interfejsu, tęcza, efekt hologramu.
+Prawy Shift otwiera menu z kolumnami modułów (przeciągaj panele za nagłówek, PPM / strzałka = ustawienia, pole wyszukiwania).
+
+- **Wizualne:** Hitbox (styl, cele, wypełnienie, kolor).
+- **Dźwięki:** Hit Sound / Kill Sound – wbudowane dźwięki albo własne pliki .wav
+  (przeciągnij .wav na okno gry przy otwartym menu albo wrzuć do `config/holovis/sounds`).
+- **Świat:** Custom Sky – własny kolor nieba (i chmur), opcjonalnie zależny od pory dnia.
+- **HUD:** Watermark (nazwa + FPS), Koordynaty.
+- **Klient:** Akcent GUI, Gradient (2 kolory), Tło GUI (kolor + przezroczystość), Kolor napisu.
 - Config: `config/holovis.json`.
 
-## Gotowy jar
-Po wrzuceniu repo na GitHub, zakładka **Releases** zawiera gotowy `holovis-1.0.0.jar` (buduje się automatycznie).
-Wrzuć go do `.minecraft/mods` razem z Fabric API (1.21.4).
+Gotowy jar: zakładka **Releases** w repo na GitHubie (buduje się automatycznie po każdej zmianie).
